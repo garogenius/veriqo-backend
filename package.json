@@ -40,9 +40,7 @@
     "class-transformer": "*",
     "argon2": "*",
     "helmet": "*",
-    "@prisma/client": "^7.10.0",
-    "@prisma/adapter-pg": "^7.10.0",
-    "pg": "*"
+    "@prisma/client": "^5.21.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
@@ -60,8 +58,7 @@
     "typescript": "^6.0.2",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^4.1.2",
-    "prisma": "^7.10.0",
-    "@prisma/config": "^7.10.0",
+    "prisma": "^5.21.1",
     "@types/passport-jwt": "^4.0.1"
   }
 }
