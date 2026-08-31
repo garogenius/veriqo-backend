@@ -45,4 +45,20 @@ export class WebhooksController {
     });
     return { data: deliveries };
   }
+
+  @Post(':id/rotate-secret')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rotate the signing secret for a webhook endpoint' })
+  async rotateSecret(@Request() req: any, @Param('id') id: string) {
+    const organizationId = req.organizationId || req.user?.organizationId || 'org_test123';
+    return this.webhooksService.rotateSecret(organizationId, id);
+  }
+
+  @Post(':id/test')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send a test ping event to a webhook endpoint' })
+  async sendTestEvent(@Request() req: any, @Param('id') id: string) {
+    const organizationId = req.organizationId || req.user?.organizationId || 'org_test123';
+    return this.webhooksService.sendTestEvent(organizationId, id);
+  }
 }

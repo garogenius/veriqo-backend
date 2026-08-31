@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { createHmac } from 'crypto';
 // import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
@@ -40,8 +41,24 @@ export class WebhookWorkerService {
     try {
       this.logger.log(`Dispatching webhook event ${delivery.eventId} to ${delivery.endpoint.url}`);
       
+      const payloadString = typeof delivery.payload === 'string' 
+        ? delivery.payload 
+        : JSON.stringify(delivery.payload);
+
+      // Generate HMAC signature
+      const signature = createHmac('sha256', delivery.endpoint.secret)
+        .update(payloadString)
+        .digest('hex');
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-veriqo-signature': signature,
+        'x-veriqo-event-id': delivery.eventId,
+      };
+
       // Simulate HTTP request to customer webhook endpoint
-      // const response = await fetch(...)
+      // const response = await fetch(delivery.endpoint.url, { method: 'POST', body: payloadString, headers })
+      
       const isSuccess = Math.random() > 0.5; // Randomly succeed or fail for mock purposes
       const httpStatus = isSuccess ? 200 : 500;
       const responseTime = Math.floor(Math.random() * 500) + 50;

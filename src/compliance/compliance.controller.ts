@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity, ApiHeader } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiSecurity, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
 import { ApiKeyAuthGuard } from '../auth/api-key-auth.guard';
 import { ComplianceService } from './compliance.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,6 +21,33 @@ export class ComplianceController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async submitKyb(@Request() req: any) {
     const profile = await this.complianceService.submitKyb(req.organizationId);
+    return { data: profile };
+  }
+
+  @Get('kyb')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Get KYB profile details' })
+  async getKybProfile(@Request() req: any) {
+    const kyb = await this.prisma.kybProfile.findUnique({
+      where: { organizationId: req.organizationId }
+    });
+    return { data: kyb };
+  }
+
+  @Patch('kyb')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Update KYB profile details' })
+  async updateKybProfile(@Request() req: any, @Body() body: any) {
+    const kyb = await this.complianceService.updateKyb(req.organizationId, body);
+    return { data: kyb };
+  }
+
+  @Post('kyb/resubmit')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Resubmit KYB Verification' })
+  async resubmitKyb(@Request() req: any) {
+    const profile = await this.complianceService.resubmitKyb(req.organizationId);
     return { data: profile };
   }
 
@@ -59,5 +86,48 @@ export class ComplianceController {
     });
 
     return { data: consent };
+  }
+
+  @Get('consent')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'List all consents for a user' })
+  async getConsents(@Request() req: any) {
+    // Assuming ApiKeyAuthGuard validates and attaches a user or the client acts on behalf of a user
+    const userId = req.user?.id || req.body?.userId;
+    const consents = await this.complianceService.getConsents(userId);
+    return { data: consents };
+  }
+
+  @Delete('consent/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Revoke a specific consent' })
+  async revokeConsent(@Request() req: any, @Param('id') id: string) {
+    const userId = req.user?.id || req.body?.userId;
+    await this.complianceService.revokeConsent(userId, id);
+  }
+
+  @Post('documents')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Upload a compliance document' })
+  async uploadDocument(@Request() req: any, @Body() body: any) {
+    const doc = await this.complianceService.uploadDocument(req.organizationId, body);
+    return { data: doc };
+  }
+
+  @Get('documents')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'List compliance documents' })
+  async getDocuments(@Request() req: any) {
+    const docs = await this.complianceService.getDocuments(req.organizationId);
+    return { data: docs };
+  }
+
+  @Delete('documents/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Delete a compliance document' })
+  async deleteDocument(@Request() req: any, @Param('id') id: string) {
+    await this.complianceService.deleteDocument(req.organizationId, id);
   }
 }

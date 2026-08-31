@@ -206,9 +206,15 @@ model FinancialConnection {
   organizationId  String
   provider        String    // e.g., PLAID, MONO
   environment     ApiEnvironment
-  status          ConnectionStatus @default(CREATED)
+  userId          String?
+  providerId      String?
+  providerAccountId String?
+  type            String?
+  status          ConnectionStatus @default(PENDING)
   syncCursor      String?
-  lastSyncAt      DateTime?
+  lastSyncedAt    DateTime?
+  lastSuccessfulSyncAt DateTime?
+  lastError       String?
   accessToken     String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -218,13 +224,12 @@ model FinancialConnection {
 }
 
 enum ConnectionStatus {
-  CREATED
-  AUTHORIZATION_PENDING
-  AUTHORIZED
+  PENDING
+  CONNECTED
   SYNCING
-  ACTIVE
-  EXPIRED
-  REVOKED
+  SYNCED
+  RECONNECT_REQUIRED
+  FAILED
   DISCONNECTED
 }
 
@@ -302,6 +307,7 @@ model WebhookDelivery {
   id                String    @id @default(uuid())
   webhookEndpointId String
   eventId           String    // Unique identifier for idempotency
+  payload           Json      @default("{}")
   attemptNumber     Int       @default(1)
   status            String    // PENDING, SUCCEEDED, FAILED, DEAD_LETTER
   httpStatus        Int?
@@ -475,6 +481,19 @@ model KybProfile {
   updatedAt       DateTime  @updatedAt
 
   organization    Organization @relation(fields: [organizationId], references: [id])
+  documents       ComplianceDocument[]
+}
+
+model ComplianceDocument {
+  id              String    @id @default(uuid())
+  kybProfileId    String
+  organizationId  String
+  type            String    // e.g. "INCORPORATION_CERTIFICATE"
+  fileUrl         String
+  status          String    @default("PENDING") // PENDING, VERIFIED, REJECTED
+  uploadedAt      DateTime  @default(now())
+
+  kybProfile      KybProfile @relation(fields: [kybProfileId], references: [id])
 }
 
 model KycProfile {

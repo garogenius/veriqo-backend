@@ -54,10 +54,50 @@ export class WebhooksService {
       data: {
         webhookEndpointId: endpoint.id,
         eventId,
+        payload,
         status: 'PENDING',
         attemptNumber: 1,
         nextRetryAt: new Date(), // Immediate
       }
     });
+  }
+
+  async rotateSecret(organizationId: string, endpointId: string) {
+    const endpoint = await this.prisma.webhookEndpoint.findUnique({
+      where: { id: endpointId }
+    });
+
+    if (!endpoint || endpoint.organizationId !== organizationId) {
+      throw new NotFoundException('Webhook endpoint not found');
+    }
+
+    const newSecret = `whsec_${randomBytes(24).toString('hex')}`;
+
+    return this.prisma.webhookEndpoint.update({
+      where: { id: endpointId },
+      data: { secret: newSecret }
+    });
+  }
+
+  async sendTestEvent(organizationId: string, endpointId: string) {
+    const endpoint = await this.prisma.webhookEndpoint.findUnique({
+      where: { id: endpointId }
+    });
+
+    if (!endpoint || endpoint.organizationId !== organizationId) {
+      throw new NotFoundException('Webhook endpoint not found');
+    }
+
+    const testPayload = {
+      id: `evt_test_${Date.now()}`,
+      type: 'ping',
+      created_at: new Date().toISOString(),
+      data: {
+        message: 'This is a test webhook from VERIQO'
+      }
+    };
+
+    await this.createDeliveryRecord(endpoint, 'ping', testPayload);
+    return { success: true, message: 'Test event queued for delivery' };
   }
 }

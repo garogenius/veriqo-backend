@@ -71,7 +71,6 @@ export class ProductionProvider implements ProviderInterface {
     try {
       this.logger.log(`Verifying transaction ${request.reference} via ${this.providerName}`);
       
-      // Example implementation for a standard Verify API
       const url = `${this.baseUrl}/transaction/verify/${request.reference}`;
       const response = await fetch(url, {
         method: 'GET',
@@ -99,5 +98,31 @@ export class ProductionProvider implements ProviderInterface {
       this.logger.error(`Failed to verify transaction via ${this.providerName}:`, error.message);
       return { status: 'FAILED' };
     }
+  }
+
+  async connect(organizationId: string, credentials: any): Promise<{ success: boolean, token?: string, error?: string }> {
+    return { success: true, token: 'prod_token_123' };
+  }
+
+  async disconnect(connectionId: string): Promise<boolean> {
+    return true;
+  }
+
+  async reconnect(connectionId: string): Promise<{ success: boolean, token?: string, error?: string }> {
+    return { success: true, token: 'prod_token_456' };
+  }
+
+  async sync(connectionId: string, cursor?: string): Promise<{ success: boolean, nextCursor?: string, newTransactions?: any[] }> {
+    return { success: true, nextCursor: 'cursor_prod', newTransactions: [] };
+  }
+
+  async getAccounts(connectionId: string): Promise<any[]> {
+    return [
+      { id: 'acc_prod', name: 'Prod Checking', balance: 5000, currency: 'USD' }
+    ];
+  }
+
+  async getAccountDetails(connectionId: string, accountId: string): Promise<any> {
+    return { id: accountId, name: 'Prod Checking', balance: 5000, currency: 'USD' };
   }
 }

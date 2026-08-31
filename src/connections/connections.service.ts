@@ -27,7 +27,7 @@ export class ConnectionsService {
         organizationId,
         provider: provider.id,
         environment,
-        status: ConnectionStatus.CREATED,
+        status: ConnectionStatus.PENDING,
       },
     });
   }
@@ -62,7 +62,7 @@ export class ConnectionsService {
     return this.prisma.financialConnection.update({
       where: { id: conn.id },
       data: {
-        status: ConnectionStatus.AUTHORIZED,
+        status: ConnectionStatus.CONNECTED,
         accessToken: fakeToken, // In production, this would be encrypted before storage
       },
     });
@@ -74,7 +74,7 @@ export class ConnectionsService {
   async markActive(connectionId: string): Promise<FinancialConnection> {
     return this.prisma.financialConnection.update({
       where: { id: connectionId },
-      data: { status: ConnectionStatus.ACTIVE },
+      data: { status: ConnectionStatus.SYNCED },
     });
   }
 
@@ -86,8 +86,52 @@ export class ConnectionsService {
       where: { id: connectionId },
       data: { 
         syncCursor: cursor,
-        lastSyncAt: new Date(),
+        lastSyncedAt: new Date(),
+        lastSuccessfulSyncAt: new Date(),
+        status: ConnectionStatus.SYNCED
       },
+    });
+  }
+
+  async update(connectionId: string, organizationId: string, data: any): Promise<FinancialConnection> {
+    const conn = await this.getConnection(connectionId, organizationId);
+    return this.prisma.financialConnection.update({
+      where: { id: conn.id },
+      data
+    });
+  }
+
+  async reconnect(connectionId: string, organizationId: string): Promise<FinancialConnection> {
+    const conn = await this.getConnection(connectionId, organizationId);
+    return this.prisma.financialConnection.update({
+      where: { id: conn.id },
+      data: { status: ConnectionStatus.PENDING }
+    });
+  }
+
+  async sync(connectionId: string, organizationId: string): Promise<FinancialConnection> {
+    const conn = await this.getConnection(connectionId, organizationId);
+    return this.prisma.financialConnection.update({
+      where: { id: conn.id },
+      data: { status: ConnectionStatus.SYNCING }
+    });
+  }
+
+  async getStatus(connectionId: string, organizationId: string) {
+    const conn = await this.getConnection(connectionId, organizationId);
+    return {
+      id: conn.id,
+      status: conn.status,
+      lastSyncedAt: conn.lastSyncedAt,
+      lastSuccessfulSyncAt: conn.lastSuccessfulSyncAt,
+      lastError: conn.lastError
+    };
+  }
+
+  async getAccounts(connectionId: string, organizationId: string) {
+    const conn = await this.getConnection(connectionId, organizationId);
+    return this.prisma.financialAccount.findMany({
+      where: { connectionId: conn.id }
     });
   }
 }

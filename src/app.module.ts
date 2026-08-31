@@ -18,6 +18,8 @@ import { EventsModule } from './events/events.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ComplianceModule } from './compliance/compliance.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { AuditModule } from './audit/audit.module';
+import { NotificationsModule } from './notifications/notifications.module';
 // import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -45,11 +47,14 @@ import { APP_GUARD } from '@nestjs/core';
     SubscriptionsModule,
     ComplianceModule,
     AnalyticsModule,
+    AuditModule,
+    NotificationsModule,
     // ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 100, // Global limit: 100 requests per minute
-    }]),
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60000, limit: 100 },
+      { name: 'auth', ttl: 60000, limit: 10 },
+      { name: 'analytics', ttl: 60000, limit: 300 }
+    ]),
   ],
   providers: [
     {

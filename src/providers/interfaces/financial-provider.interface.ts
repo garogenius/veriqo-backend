@@ -11,6 +11,8 @@ export interface FinancialProvider {
    * Unique identifier for the provider (e.g., 'MOCK', 'PLAID', 'MONO')
    */
   readonly id: string;
+  readonly name: string;
+  readonly environment: string;
 
   /**
    * List of capabilities supported by this provider
@@ -27,9 +29,17 @@ export interface FinancialProvider {
    */
   checkHealth(): Promise<ProviderHealth>;
 
-  // Future Methods:
-  // connect(params: any): Promise<any>;
-  // disconnect(connectionId: string): Promise<void>;
-  // getAccounts(connectionId: string): Promise<any[]>;
-  // getTransactions(connectionId: string, cursor?: string): Promise<any>;
+  // Connection Lifecycle
+  connect(organizationId: string, credentials: any): Promise<{ success: boolean, token?: string, error?: string }>;
+  disconnect(connectionId: string): Promise<boolean>;
+  reconnect(connectionId: string): Promise<{ success: boolean, token?: string, error?: string }>;
+  sync(connectionId: string, cursor?: string): Promise<{ success: boolean, nextCursor?: string, newTransactions?: any[] }>;
+  
+  // Financial Data
+  getAccounts(connectionId: string): Promise<any[]>;
+  getAccountDetails(connectionId: string, accountId: string): Promise<any>;
+  
+  // Resolution & Verification
+  resolveAccount?(request: any): Promise<any>;
+  verifyTransaction?(request: any): Promise<any>;
 }

@@ -29,6 +29,18 @@ export interface TransactionVerificationResponse {
 export interface ProviderInterface {
   getName(): string;
   checkHealth(): Promise<boolean>;
+  
+  // Account Resolution & Verification
   resolveAccount(request: AccountResolutionRequest): Promise<AccountResolutionResponse>;
   verifyTransaction(request: TransactionVerificationRequest): Promise<TransactionVerificationResponse>;
+  
+  // Connection Lifecycle
+  connect(organizationId: string, credentials: any): Promise<{ success: boolean, token?: string, error?: string }>;
+  disconnect(connectionId: string): Promise<boolean>;
+  reconnect(connectionId: string): Promise<{ success: boolean, token?: string, error?: string }>;
+  sync(connectionId: string, cursor?: string): Promise<{ success: boolean, nextCursor?: string, newTransactions?: any[] }>;
+  
+  // Financial Data
+  getAccounts(connectionId: string): Promise<any[]>;
+  getAccountDetails(connectionId: string, accountId: string): Promise<any>;
 }
