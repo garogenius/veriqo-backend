@@ -20,6 +20,6 @@ export class MatchController {
   @ApiResponse({ status: 200, description: 'Successful match attempt.' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async matchTransaction(@Request() req: any, @Body() matchTransactionDto: MatchTransactionDto) {
-    return this.matchService.matchTransaction(req.organizationId, matchTransactionDto);
+    return this.matchService.matchTransaction(req.organizationId, matchTransactionDto.expectedPaymentId, matchTransactionDto.transactionId);
   }
 }

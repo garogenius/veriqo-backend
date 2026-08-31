@@ -1,19 +1,14 @@
-import { IsString, IsNotEmpty, IsNumber } from 'class-validator';
+import { IsString, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class MatchTransactionDto {
-  @ApiProperty({ example: 'INV-10092' })
+  @ApiProperty({ example: 'exp_pay_12345' })
   @IsString()
   @IsNotEmpty()
-  reference: string;
+  expectedPaymentId: string;
 
-  @ApiProperty({ example: 250000 })
-  @IsNumber()
-  @IsNotEmpty()
-  expected_amount: number;
-
-  @ApiProperty({ example: 'NGN' })
+  @ApiProperty({ example: 'txn_98765' })
   @IsString()
   @IsNotEmpty()
-  currency: string;
+  transactionId: string;
 }
