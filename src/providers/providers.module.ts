@@ -1,11 +1,14 @@
-import { Global, Module } from '@nestjs/common';
-import { MockProvider } from './mock.provider';
-import { ProductionProvider } from './production.provider';
-import { ProviderRouter } from './provider.router';
+import { Module } from '@nestjs/common';
+import { ProviderRegistryService } from './provider-registry.service';
+import { ProviderRouterService } from './provider-router.service';
+import { MockProviderService } from './adapters/mock-provider.service';
 
-@Global()
 @Module({
-  providers: [MockProvider, ProductionProvider, ProviderRouter],
-  exports: [ProviderRouter],
+  providers: [
+    ProviderRegistryService,
+    ProviderRouterService,
+    MockProviderService,
+  ],
+  exports: [ProviderRouterService, ProviderRegistryService],
 })
 export class ProvidersModule {}

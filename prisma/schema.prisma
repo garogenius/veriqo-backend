@@ -54,6 +54,9 @@ model Organization {
   apiClients         ApiClient[]
   transactions       Transaction[]
   webhookEndpoints   WebhookEndpoint[]
+  financialConnections FinancialConnection[]
+  expectedPayments   ExpectedPayment[]
+  alerts             Alert[]
 }
 
 enum OrgType {
@@ -167,26 +170,71 @@ enum KeyStatus {
   EXPIRED
 }
 
-model Transaction {
-  id                  String    @id @default(uuid())
-  organizationId      String
-  connectionId        String?
-  provider            String?
-  externalTransactionId String?
-  amount              Decimal
-  currency            String
-  direction           String    // e.g. DEBIT, CREDIT
-  status              String
-  reference           String?
-  transactionType     String?
-  metadata            Json?
-  occurredAt          DateTime?
-  verifiedAt          DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+model FinancialConnection {
+  id              String    @id @default(uuid())
+  organizationId  String
+  provider        String    // e.g., PLAID, MONO
+  environment     ApiEnvironment
+  status          ConnectionStatus @default(CREATED)
+  syncCursor      String?
+  lastSyncAt      DateTime?
+  accessToken     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  organization        Organization @relation(fields: [organizationId], references: [id])
-  verifications       VerificationRecord[]
+  organization    Organization       @relation(fields: [organizationId], references: [id])
+  accounts        FinancialAccount[]
+}
+
+enum ConnectionStatus {
+  CREATED
+  AUTHORIZATION_PENDING
+  AUTHORIZED
+  SYNCING
+  ACTIVE
+  EXPIRED
+  REVOKED
+  DISCONNECTED
+}
+
+model FinancialAccount {
+  id              String    @id @default(uuid())
+  connectionId    String
+  externalId      String
+  name            String
+  currency        String
+  balance         BigInt?
+  type            String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  connection      FinancialConnection @relation(fields: [connectionId], references: [id])
+  transactions    Transaction[]
+}
+
+model Transaction {
+  id                    String    @id @default(uuid())
+  organizationId        String
+  accountId             String?
+  provider              String
+  externalTransactionId String
+  amount                BigInt
+  currency              String
+  direction             String
+  status                String
+  source                String    @default("PROVIDER_SYNC")
+  reference             String?
+  transactionType       String?
+  metadata              Json?
+  occurredAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization          Organization @relation(fields: [organizationId], references: [id])
+  account               FinancialAccount? @relation(fields: [accountId], references: [id])
+  verifications         VerificationRecord[]
+
+  @@unique([provider, externalTransactionId])
 }
 
 model VerificationRecord {
@@ -230,3 +278,61 @@ model AdminActionLog {
 
   admin          User      @relation(fields: [adminId], references: [id])
 }
+
+model ExpectedPayment {
+  id                String    @id @default(uuid())
+  organizationId    String
+  expectedAmount    BigInt
+  currency          String
+  externalReference String?
+  dueDate           DateTime?
+  status            String    // PENDING | MATCHED | PARTIALLY_MATCHED | EXCEPTION
+  createdAt         DateTime  @default(now())
+
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  matches           ReconciliationMatch[]
+}
+
+model ReconciliationMatch {
+  id                String    @id @default(uuid())
+  expectedPaymentId String
+  transactionId     String
+  matchedAmount     BigInt
+  strategyUsed      String    // EXACT | REFERENCE | MANUAL
+  createdAt         DateTime  @default(now())
+
+  expectedPayment   ExpectedPayment @relation(fields: [expectedPaymentId], references: [id])
+}
+
+model Proof {
+  id             String    @id @default(uuid())
+  verificationId String    @unique
+  status         String    // ACTIVE | REVOKED | EXPIRED
+  token          String    @unique // Shareable token
+  createdAt      DateTime  @default(now())
+}
+
+model Alert {
+  id             String    @id @default(uuid())
+  organizationId String
+  type           String    // RISK_SIGNAL | ANOMALY | REVIEW_REQUIRED
+  severity       String    // LOW | MEDIUM | HIGH | CRITICAL
+  status         String    // OPEN | RESOLVED
+  resourceType   String
+  resourceId     String
+  description    String
+  createdAt      DateTime  @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid())
+  eventType   String    // e.g., TransactionCreated
+  payload     Json
+  status      String    @default("PENDING") // PENDING | PROCESSED | FAILED
+  error       String?
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+}
+
