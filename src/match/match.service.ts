@@ -1,65 +1,89 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { MatchTransactionDto } from './dto/match-transaction.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class MatchService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
-  async matchTransaction(organizationId: string, dto: MatchTransactionDto) {
+  /**
+   * Reconciliation Engine: Matches expected payments against actual transactions.
+   */
+  async matchTransaction(organizationId: string, expectedPaymentId: string, transactionId: string) {
     try {
-      // Basic logic for reconciliation match
-      // In production, this would query the Transactions table and apply Reconciliation Rules
+      // 1. Fetch Expected Payment
+      const expectedPayment = await this.prisma.expectedPayment.findUnique({
+        where: { id: expectedPaymentId, organizationId }
+      });
 
-      let status = 'PENDING';
-      if (dto.expected_amount === 250000) {
-        status = 'MATCHED';
-      } else if (dto.expected_amount === 10000) {
-        status = 'PARTIALLY_MATCHED';
-      } else {
-        status = 'UNMATCHED';
+      if (!expectedPayment) {
+        throw new NotFoundException('Expected Payment not found');
       }
 
-      const transaction = await this.prisma.transaction.create({
+      // 2. Fetch Transaction
+      const transaction = await this.prisma.transaction.findUnique({
+        where: { id: transactionId, organizationId }
+      });
+
+      if (!transaction) {
+        throw new NotFoundException('Transaction not found');
+      }
+
+      // 3. Evaluate Match Rules
+      let strategyUsed = 'MANUAL';
+      let status = 'PENDING';
+      
+      if (transaction.amount === expectedPayment.expectedAmount) {
+        status = 'MATCHED';
+        strategyUsed = 'EXACT';
+      } else if (transaction.amount < expectedPayment.expectedAmount) {
+        status = 'PARTIALLY_MATCHED';
+        strategyUsed = 'AMOUNT';
+      } else {
+        status = 'EXCEPTION'; // Overpayment
+        strategyUsed = 'AMOUNT';
+      }
+
+      // 4. Create the ReconciliationMatch record
+      const match = await this.prisma.reconciliationMatch.create({
         data: {
-          organizationId,
-          provider: 'MOCK',
-          externalTransactionId: `mock_${Date.now()}_${Math.random()}`,
-          amount: BigInt(dto.expected_amount),
-          currency: dto.currency,
-          direction: 'UNKNOWN',
-          status: status,
-          reference: dto.reference,
-          transactionType: 'RECONCILIATION',
+          expectedPaymentId,
+          transactionId,
+          matchedAmount: transaction.amount,
+          strategyUsed,
         }
       });
 
-      const record = await this.prisma.verificationRecord.create({
+      // 5. Update the Expected Payment status
+      await this.prisma.expectedPayment.update({
+        where: { id: expectedPaymentId },
+        data: { status }
+      });
+
+      // 6. Outbox Pattern for Domain Event
+      await this.prisma.outboxEvent.create({
         data: {
-          transactionId: transaction.id,
-          method: 'TRANSACTION_MATCH',
-          provider: 'VERIQO_INTERNAL',
-          status: status,
+          eventType: 'ReconciliationMatched',
+          payload: {
+            matchId: match.id,
+            status,
+            organizationId
+          }
         }
       });
 
       return {
         data: {
-          match_id: record.id,
-          status: status,
-          expected: {
-            amount: dto.expected_amount,
-            currency: dto.currency
-          },
-          received: {
-            // Mocking received amount for demo
-            amount: status === 'PARTIALLY_MATCHED' ? dto.expected_amount / 2 : dto.expected_amount,
-            currency: dto.currency
-          }
+          match_id: match.id,
+          status,
+          strategy_used: strategyUsed,
+          matched_amount: Number(transaction.amount) / 100, // Returning as decimal for API
+          currency: transaction.currency
         }
       };
     } catch (error: any) {
-      throw new InternalServerErrorException('Failed to process match request');
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException('Failed to process reconciliation match');
     }
   }
 }

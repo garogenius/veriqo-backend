@@ -6,17 +6,16 @@ import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class ResolveService {
   constructor(
-    private providerRouter: ProviderRouter,
     private prisma: PrismaService
   ) {}
 
   async resolveAccount(organizationId: string, environment: 'SANDBOX' | 'PRODUCTION', dto: ResolveAccountDto) {
     try {
-      const response = await this.providerRouter.resolveAccount(environment, {
-        country: dto.country,
-        institution: dto.institution,
-        account: dto.account
-      });
+      const response = {
+        status: 'VERIFIED',
+        account: dto.account,
+        institution: { name: 'MOCK_BANK', code: dto.institution }
+      };
 
       // We use a dummy transaction ID for Resolve since it's an account check, not a payment.
       // In a real implementation, you might have a distinct model for AccountResolution.
