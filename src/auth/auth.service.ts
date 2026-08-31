@@ -112,23 +112,90 @@ export class AuthService {
     };
   }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, ipAddress?: string, userAgent?: string) {
     const user = await this.usersService.findByEmail(loginDto.email);
+    
+    // 1. Account Lockout Check
+    if (user && user.status === 'SUSPENDED') {
+      await this.logAttempt(loginDto.email, false, ipAddress, userAgent, 'ACCOUNT_LOCKED');
+      throw new UnauthorizedException('Account is locked. Please contact support.');
+    }
+
+    // 2. Progressive Protection: Check failed attempts in last 15 minutes
+    const recentFailures = await this.prisma.loginAttempt.count({
+      where: {
+        email: loginDto.email,
+        success: false,
+        createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) }
+      }
+    });
+
+    if (recentFailures >= 5) {
+      if (user) {
+        await this.prisma.user.update({ where: { id: user.id }, data: { status: 'SUSPENDED' }});
+        await this.logSecurityEvent(null, user.id, 'ACCOUNT_LOCKED', 'HIGH');
+      }
+      throw new UnauthorizedException('Too many failed attempts. Account locked.');
+    }
+
     if (!user) {
+      await this.logAttempt(loginDto.email, false, ipAddress, userAgent, 'USER_NOT_FOUND');
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isPasswordValid = await argon2.verify(user.passwordHash, loginDto.password);
     if (!isPasswordValid) {
+      await this.logAttempt(loginDto.email, false, ipAddress, userAgent, 'INVALID_PASSWORD');
+      await this.logSecurityEvent(null, user.id, 'LOGIN_FAILED', 'LOW');
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Optionally update lastLoginAt here using a background event/queue.
+    // 3. Login Successful
+    await this.logAttempt(loginDto.email, true, ipAddress, userAgent);
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    await this.logSecurityEvent(null, user.id, 'LOGIN_SUCCESS', 'INFO');
+
+    // 4. Create Session and Refresh Token
+    const rawRefreshToken = crypto.randomBytes(32).toString('hex');
+    const refreshTokenHash = await argon2.hash(rawRefreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    const session = await this.prisma.session.create({
+      data: {
+        userId: user.id,
+        refreshTokenHash,
+        expiresAt,
+        ipAddress,
+        userAgent,
+      }
+    });
+
+    const payload = { sub: user.id, email: user.email, sessionId: session.id };
     
-    const payload = { sub: user.id, email: user.email };
     return {
       access_token: await this.jwtService.signAsync(payload),
-      user: { id: user.id, email: user.email, firstName: user.firstName },
+      refresh_token: rawRefreshToken,
+      user: { id: user.id, email: user.email, firstName: user.firstName, mfaEnabled: user.mfaEnabled },
     };
+  }
+
+  private async logAttempt(email: string, success: boolean, ipAddress?: string, userAgent?: string, reason?: string) {
+    try {
+      await this.prisma.loginAttempt.create({
+        data: { email, success, ipAddress, userAgent }
+      });
+    } catch (e) {
+      // Don't fail the request if logging fails
+    }
+  }
+
+  private async logSecurityEvent(organizationId: string | null, userId: string | null, eventType: string, severity: string) {
+    try {
+      await this.prisma.securityEvent.create({
+        data: { organizationId, userId, eventType, severity }
+      });
+    } catch (e) {
+      // Don't fail the request if logging fails
+    }
   }
 }

@@ -40,6 +40,19 @@ export class ConnectionsService {
     return conn;
   }
 
+  async findAll(organizationId: string): Promise<FinancialConnection[]> {
+    return this.prisma.financialConnection.findMany({
+      where: { organizationId },
+    });
+  }
+
+  async remove(connectionId: string, organizationId: string): Promise<void> {
+    const conn = await this.getConnection(connectionId, organizationId);
+    await this.prisma.financialConnection.delete({
+      where: { id: conn.id },
+    });
+  }
+
   /**
    * Simulates the OAuth callback completing.
    */

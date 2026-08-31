@@ -1,5 +1,6 @@
-import { Controller, Post, Get, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -9,7 +10,10 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 @UseGuards(JwtAuthGuard)
 @Controller('v1/webhooks')
 export class WebhooksController {
-  constructor(private readonly webhooksService: WebhooksService) {}
+  constructor(
+    private readonly webhooksService: WebhooksService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -28,5 +32,17 @@ export class WebhooksController {
   async getWebhooks(@Request() req: any) {
     const organizationId = req.organizationId || 'org_test123';
     return this.webhooksService.findAll(organizationId);
+  }
+
+  @Get(':id/deliveries')
+  @ApiOperation({ summary: 'List all delivery attempts for a specific webhook endpoint' })
+  @ApiResponse({ status: 200, description: 'Returns delivery history.' })
+  async getDeliveries(@Param('id') id: string) {
+    const deliveries = await this.prisma.webhookDelivery.findMany({
+      where: { webhookEndpointId: id },
+      orderBy: { attemptedAt: 'desc' },
+      take: 20
+    });
+    return { data: deliveries };
   }
 }

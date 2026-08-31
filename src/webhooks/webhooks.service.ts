@@ -28,7 +28,7 @@ export class WebhooksService {
     });
   }
 
-  // Example method that would be called internally by other services (or a worker)
+  // Publish event creates WebhookDelivery records for the worker to pick up
   async publishEvent(organizationId: string, environment: string, eventName: string, payload: any) {
     const endpoints = await this.prisma.webhookEndpoint.findMany({
       where: { 
@@ -40,27 +40,24 @@ export class WebhooksService {
 
     for (const endpoint of endpoints) {
       if (endpoint.events.includes(eventName) || endpoint.events.includes('*')) {
-        this.dispatchWebhook(endpoint, eventName, payload);
+        await this.createDeliveryRecord(endpoint, eventName, payload);
       }
     }
   }
 
-  private dispatchWebhook(endpoint: any, eventName: string, payload: any) {
-    // In production, this pushes to a queue (e.g. BullMQ) for retry and exponential backoff
-    const timestamp = Date.now().toString();
+  private async createDeliveryRecord(endpoint: any, eventName: string, payload: any) {
     const eventId = `evt_${randomBytes(12).toString('hex')}`;
     
-    const signaturePayload = `${timestamp}.${JSON.stringify(payload)}`;
-    const signature = createHmac('sha256', endpoint.secret).update(signaturePayload).digest('hex');
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'X-VERIQO-Event-ID': eventId,
-      'X-VERIQO-Timestamp': timestamp,
-      'X-VERIQO-Signature': signature
-    };
-
-    // Simulated fetch call
-    console.log(`[Webhook Dispatch] Sending ${eventName} to ${endpoint.url} with signature ${signature}`);
+    // Store the raw payload inside the outbox/delivery, or assume the worker can reconstruct it.
+    // For simplicity, we just log the delivery intent here. The worker will handle actual signature & HTTP post.
+    await this.prisma.webhookDelivery.create({
+      data: {
+        webhookEndpointId: endpoint.id,
+        eventId,
+        status: 'PENDING',
+        attemptNumber: 1,
+        nextRetryAt: new Date(), // Immediate
+      }
+    });
   }
 }

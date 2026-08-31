@@ -1,7 +1,9 @@
-import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { VerifyTransactionDto } from './dto/verify-transaction.dto';
 import { ProviderRouterService } from '../providers/provider-router.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { EntitlementService } from '../subscriptions/entitlement.service';
+import { UsageService } from '../subscriptions/usage.service';
 
 export interface VerificationStrategy {
   evaluate(transaction: any, criteria: any): boolean;
@@ -29,11 +31,17 @@ export class VerifyService {
 
   constructor(
     private providerRouter: ProviderRouterService,
-    private prisma: PrismaService
+    private prisma: PrismaService,
+    private entitlementService: EntitlementService,
+    private usageService: UsageService,
   ) {}
 
   async verifyTransaction(organizationId: string, environment: 'SANDBOX' | 'PRODUCTION', dto: VerifyTransactionDto) {
     try {
+      // Enforce Quota Limits (Rule 118, 140)
+      if (environment === 'PRODUCTION') {
+        await this.entitlementService.enforceQuota(organizationId, 'maxTransactions');
+      }
       // Check if transaction exists locally first
       let transaction = await this.prisma.transaction.findFirst({
         where: { 
@@ -104,6 +112,11 @@ export class VerifyService {
           }
         }
       });
+
+      // Idempotent Billing Usage (Rule 137)
+      if (environment === 'PRODUCTION') {
+        await this.usageService.recordUsage(organizationId, 'transaction_verification', record.id);
+      }
 
       return {
         data: {

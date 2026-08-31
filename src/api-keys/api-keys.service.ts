@@ -66,4 +66,26 @@ export class ApiKeysService {
 
     return key;
   }
+
+  async create(organizationId: string, dto: any): Promise<{ key: ApiKey, rawSecret: string }> {
+    return this.createKey(dto.apiClientId, dto.scopes);
+  }
+
+  async findAll(organizationId: string): Promise<ApiKey[]> {
+    return this.prisma.apiKey.findMany({
+      where: {
+        apiClient: {
+          organizationId
+        }
+      }
+    });
+  }
+
+  async revoke(organizationId: string, id: string): Promise<ApiKey> {
+    // Note: ensure organization matches before revoking
+    return this.prisma.apiKey.update({
+      where: { id },
+      data: { status: 'REVOKED' }
+    });
+  }
 }

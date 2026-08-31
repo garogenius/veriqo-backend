@@ -20,12 +20,16 @@ model User {
   avatarUrl         String?
   status            UserStatus @default(ACTIVE)
   lastLoginAt       DateTime?
+  mfaEnabled        Boolean   @default(false)
   isSuperAdmin      Boolean   @default(false)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   memberships       OrganizationMembership[]
   adminActionLogs   AdminActionLog[]
+  sessions          Session[]
+  kycProfile        KycProfile?
+  consents          ConsentRecord[]
 }
 
 enum UserStatus {
@@ -57,6 +61,8 @@ model Organization {
   financialConnections FinancialConnection[]
   expectedPayments   ExpectedPayment[]
   alerts             Alert[]
+  subscription       Subscription?
+  kybProfile         KybProfile?
 }
 
 enum OrgType {
@@ -264,6 +270,22 @@ model WebhookEndpoint {
   updatedAt      DateTime  @updatedAt
 
   organization   Organization @relation(fields: [organizationId], references: [id])
+  deliveries     WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id                String    @id @default(uuid())
+  webhookEndpointId String
+  eventId           String    // Unique identifier for idempotency
+  attemptNumber     Int       @default(1)
+  status            String    // PENDING, SUCCEEDED, FAILED, DEAD_LETTER
+  httpStatus        Int?
+  responseTime      Int?
+  failureReason     String?
+  attemptedAt       DateTime  @default(now())
+  nextRetryAt       DateTime?
+
+  endpoint          WebhookEndpoint @relation(fields: [webhookEndpointId], references: [id])
 }
 
 model AdminActionLog {
@@ -336,3 +358,135 @@ model OutboxEvent {
   processedAt DateTime?
 }
 
+model Session {
+  id              String    @id @default(uuid())
+  userId          String
+  deviceId        String?
+  refreshTokenHash String
+  status          String    @default("ACTIVE") // ACTIVE, REVOKED
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+  ipAddress       String?
+  userAgent       String?
+  
+  user            User      @relation(fields: [userId], references: [id])
+}
+
+model LoginAttempt {
+  id              String    @id @default(uuid())
+  email           String
+  success         Boolean
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+}
+
+model SecurityEvent {
+  id              String    @id @default(uuid())
+  organizationId  String?
+  userId          String?
+  eventType       String    // LOGIN_FAILED, MFA_ENABLED, SUSPICIOUS_ACTIVITY
+  severity        String    // INFO, LOW, HIGH, CRITICAL
+  createdAt       DateTime  @default(now())
+}
+
+model Plan {
+  id              String         @id @default(uuid())
+  name            String         // STARTER, BUSINESS, ENTERPRISE
+  monthlyPrice    BigInt
+  yearlyPrice     BigInt
+  currency        String         @default("NGN")
+  maxApiKeys      Int
+  maxTransactions Int
+  features        Json           // Entitlements JSON
+  subscriptions   Subscription[]
+}
+
+model Subscription {
+  id              String    @id @default(uuid())
+  organizationId  String    @unique
+  planId          String
+  status          String    // ACTIVE, PAST_DUE, CANCELED
+  interval        String    // MONTHLY, YEARLY
+  currentPeriodEnd DateTime
+  createdAt       DateTime  @default(now())
+  
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  plan            Plan         @relation(fields: [planId], references: [id])
+  payments        Payment[]
+}
+
+model Payment {
+  id              String    @id @default(uuid())
+  subscriptionId  String
+  amount          BigInt
+  currency        String
+  status          String    // PENDING, SUCCEEDED, FAILED
+  providerRef     String    @unique
+  createdAt       DateTime  @default(now())
+
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id])
+}
+
+model UsageRecord {
+  id              String    @id @default(uuid())
+  organizationId  String
+  feature         String    // e.g. 'transaction_verification'
+  quantity        Int       @default(1)
+  idempotencyKey  String    @unique // e.g. verification_id
+  createdAt       DateTime  @default(now())
+}
+
+model KybProfile {
+  id              String    @id @default(uuid())
+  organizationId  String    @unique
+  provider        String    // MOCK_KYB
+  status          String    // PENDING, VERIFIED, REJECTED
+  legalName       String
+  registrationNo  String?
+  country         String
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+}
+
+model KycProfile {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  provider        String    // MOCK_KYC
+  status          String    // PENDING, VERIFIED, REJECTED
+  country         String
+  verificationLevel String  // TIER_1, TIER_2
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id])
+}
+
+model ConsentRecord {
+  id              String    @id @default(uuid())
+  userId          String
+  consentType     String    // TERMS, PRIVACY, FINANCIAL_ACCESS
+  version         String
+  status          String    @default("GRANTED") // GRANTED, WITHDRAWN
+  grantedAt       DateTime  @default(now())
+  withdrawnAt     DateTime?
+  
+  user            User      @relation(fields: [userId], references: [id])
+}
+
+model AnalyticsAggregate {
+  id              String    @id @default(uuid())
+  organizationId  String
+  metric          String    // e.g. total_transactions, api_requests
+  value           BigInt
+  period          String    // e.g. DAILY, MONTHLY
+  date            DateTime
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([organizationId, metric, period, date])
+}
