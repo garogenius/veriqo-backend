@@ -4,7 +4,7 @@ import { Prisma, Organization, OrgType } from '@prisma/client';
 
 @Injectable()
 export class OrganizationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async create(userId: string, data: { name: string; type: OrgType; country: string }): Promise<Organization> {
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
