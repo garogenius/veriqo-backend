@@ -12,6 +12,8 @@ import { ProofModule } from './proof/proof.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { ProvidersModule } from './providers/providers.module';
 import { AdminModule } from './admin/admin.module';
+import { ConnectionsModule } from './connections/connections.module';
+import { TransactionsModule } from './transactions/transactions.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -32,6 +34,8 @@ import { APP_GUARD } from '@nestjs/core';
     ProofModule,
     WebhooksModule,
     AdminModule,
+    ConnectionsModule,
+    TransactionsModule,
     ThrottlerModule.forRoot([{
       ttl: 60000,
       limit: 100, // Global limit: 100 requests per minute

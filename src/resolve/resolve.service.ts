@@ -26,7 +26,9 @@ export class ResolveService {
       const transaction = await this.prisma.transaction.create({
         data: {
           organizationId,
-          amount: 0,
+          provider: 'MOCK',
+          externalTransactionId: `mock_resolve_${Date.now()}_${Math.random()}`,
+          amount: BigInt(0),
           currency: 'NGN',
           direction: 'N/A',
           status: 'N/A',

@@ -23,7 +23,9 @@ export class MatchService {
       const transaction = await this.prisma.transaction.create({
         data: {
           organizationId,
-          amount: dto.expected_amount,
+          provider: 'MOCK',
+          externalTransactionId: `mock_${Date.now()}_${Math.random()}`,
+          amount: BigInt(dto.expected_amount),
           currency: dto.currency,
           direction: 'UNKNOWN',
           status: status,

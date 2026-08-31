@@ -21,7 +21,9 @@ export class VerifyService {
       const transaction = await this.prisma.transaction.create({
         data: {
           organizationId,
-          amount: dto.amount,
+          provider: 'MOCK',
+          externalTransactionId: `mock_verify_${Date.now()}_${Math.random()}`,
+          amount: BigInt(dto.amount),
           currency: dto.currency,
           direction: 'UNKNOWN',
           status: response.status === 'VERIFIED' ? 'SUCCESS' : response.status,
