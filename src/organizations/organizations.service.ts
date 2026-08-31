@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, Organization, OrgType } from '@prisma/client';
+import * as crypto from 'crypto';
+import * as argon2 from 'argon2';
 
 @Injectable()
 export class OrganizationsService {
@@ -34,7 +36,31 @@ export class OrganizationsService {
         },
       });
 
-      return org;
+      // Automatically provision a Sandbox API Client and API Key for this new workspace
+      const apiClient = await tx.apiClient.create({
+        data: {
+          organizationId: org.id,
+          name: 'Default Sandbox App',
+          environment: 'SANDBOX',
+          createdById: userId,
+        }
+      });
+
+      const rawSecret = crypto.randomBytes(32).toString('hex');
+      const secretHash = await argon2.hash(rawSecret);
+
+      const apiKey = await tx.apiKey.create({
+        data: {
+          apiClientId: apiClient.id,
+          publicIdentifier: `vrq_test_${crypto.randomBytes(8).toString('hex')}`,
+          secretHash,
+          environment: 'SANDBOX',
+          scopes: ['transactions:write', 'resolve:read', 'proof:write'],
+        }
+      });
+
+      // We attach the raw api key to the org response temporarily so the user can save it
+      return { ...org, initialApiKey: rawSecret, publicIdentifier: apiKey.publicIdentifier };
     });
   }
 

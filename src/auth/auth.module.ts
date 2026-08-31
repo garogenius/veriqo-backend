@@ -7,10 +7,14 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { UsersModule } from '../users/users.module';
+import { PrismaModule } from '../prisma/prisma.module';
+import { ApiKeysModule } from '../api-keys/api-keys.module';
 
 @Module({
   imports: [
     UsersModule,
+    PrismaModule,
+    ApiKeysModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
