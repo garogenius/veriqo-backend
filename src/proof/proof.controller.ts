@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, UseGuards, UseInterceptors, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, UseGuards, UseInterceptors, HttpCode, HttpStatus, Request } from '@nestjs/common';
 import { ProofService } from './proof.service';
 import { CreateProofDto } from './dto/create-proof.dto';
 import { ApiKeyAuthGuard } from '../auth/api-key-auth.guard';
@@ -19,15 +19,29 @@ export class ProofController {
   @ApiHeader({ name: 'Idempotency-Key', description: 'Unique key to prevent duplicate operations', required: false })
   @ApiResponse({ status: 200, description: 'Successful proof creation.' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async createProof(@Body() createProofDto: CreateProofDto) {
-    return this.proofService.createProof(createProofDto);
+  async createProof(@Request() req: any, @Body() createProofDto: CreateProofDto) {
+    return this.proofService.createProof(req.organizationId, createProofDto);
+  }
+
+  @Get()
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'List proofs' })
+  async getProofs(@Request() req: any, @Query() query: any) {
+    return this.proofService.findAll(req.organizationId, query);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Public endpoint to verify a proof' })
+  @ApiOperation({ summary: 'Public endpoint to view a proof' })
   @ApiResponse({ status: 200, description: 'Proof retrieved securely.' })
   async getProof(@Param('id') id: string) {
     // This is public/semi-public and does not use ApiKeyAuthGuard
     return this.proofService.getProof(id);
+  }
+
+  @Get(':id/verify')
+  @ApiOperation({ summary: 'Public endpoint to verify proof integrity' })
+  @ApiResponse({ status: 200, description: 'Proof verified.' })
+  async verifyProof(@Param('id') id: string) {
+    return this.proofService.verifyIntegrity(id);
   }
 }

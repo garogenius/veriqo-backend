@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Param, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ApiKeysService } from './api-keys.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -34,6 +34,31 @@ export class ApiKeysController {
   async getApiKeys(@Request() req: any) {
     const organizationId = req.organizationId || 'org_test123';
     return this.apiKeysService.findAll(organizationId);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a specific API Key' })
+  @ApiResponse({ status: 200, description: 'Returns the API key (without secret).' })
+  async getApiKey(@Request() req: any, @Param('id') id: string) {
+    const organizationId = req.organizationId || 'org_test123';
+    return this.apiKeysService.findById(organizationId, id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update an API Key' })
+  @ApiResponse({ status: 200, description: 'Returns the updated API key.' })
+  async updateApiKey(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    const organizationId = req.organizationId || 'org_test123';
+    return this.apiKeysService.updateKey(organizationId, id, body);
+  }
+
+  @Post(':id/rotate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rotate an API Key' })
+  @ApiResponse({ status: 200, description: 'API Key rotated. New secret is only returned once.' })
+  async rotateApiKey(@Request() req: any, @Param('id') id: string) {
+    const organizationId = req.organizationId || 'org_test123';
+    return this.apiKeysService.rotateKey(organizationId, id);
   }
 
   @Delete(':id')

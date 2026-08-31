@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWebhookDto } from './dto/create-webhook.dto';
@@ -34,6 +34,28 @@ export class WebhooksController {
     return this.webhooksService.findAll(organizationId);
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: 'Get webhook by id' })
+  async getWebhook(@Request() req: any, @Param('id') id: string) {
+    const organizationId = req.organizationId || 'org_test123';
+    return this.webhooksService.findById(organizationId, id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update a webhook endpoint' })
+  async updateWebhook(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    const organizationId = req.organizationId || 'org_test123';
+    return this.webhooksService.update(organizationId, id, body);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a webhook endpoint' })
+  async deleteWebhook(@Request() req: any, @Param('id') id: string) {
+    const organizationId = req.organizationId || 'org_test123';
+    return this.webhooksService.remove(organizationId, id);
+  }
+
   @Get(':id/deliveries')
   @ApiOperation({ summary: 'List all delivery attempts for a specific webhook endpoint' })
   @ApiResponse({ status: 200, description: 'Returns delivery history.' })
@@ -44,6 +66,14 @@ export class WebhooksController {
       take: 20
     });
     return { data: deliveries };
+  }
+
+  @Post(':id/deliveries/:deliveryId/retry')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Retry a webhook delivery' })
+  async retryDelivery(@Request() req: any, @Param('id') id: string, @Param('deliveryId') deliveryId: string) {
+    const organizationId = req.organizationId || req.user?.organizationId || 'org_test123';
+    return this.webhooksService.retryDelivery(organizationId, id, deliveryId);
   }
 
   @Post(':id/rotate-secret')

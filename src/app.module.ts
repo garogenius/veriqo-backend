@@ -20,6 +20,7 @@ import { ComplianceModule } from './compliance/compliance.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuditModule } from './audit/audit.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { HealthModule } from './health/health.module';
 // import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -49,6 +50,7 @@ import { APP_GUARD } from '@nestjs/core';
     AnalyticsModule,
     AuditModule,
     NotificationsModule,
+    HealthModule,
     // ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       { name: 'default', ttl: 60000, limit: 100 },

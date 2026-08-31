@@ -77,9 +77,32 @@ export class OrganizationsService {
     return org;
   }
 
+  async findCurrent(userId: string): Promise<Organization> {
+    const memberships = await this.prisma.organizationMembership.findMany({
+      where: { userId },
+      include: { organization: true },
+      orderBy: { createdAt: 'asc' },
+      take: 1
+    });
+
+    if (memberships.length === 0) {
+      throw new NotFoundException('No active organizations found for this user');
+    }
+
+    return memberships[0].organization;
+  }
+
   async findAll(userId: string) {
     return this.prisma.organization.findMany({
       where: { memberships: { some: { userId } } }
+    });
+  }
+
+  async updateSettings(orgId: string, userId: string, settings: any) {
+    const org = await this.findById(orgId, userId);
+    return this.prisma.organization.update({
+      where: { id: org.id },
+      data: { settings }
     });
   }
 
@@ -195,6 +218,35 @@ export class OrganizationsService {
     return this.prisma.invitation.update({
       where: { id },
       data: { status: 'REVOKED' }
+    });
+  }
+
+  async getInvitation(orgId: string, userId: string, invitationId: string) {
+    await this.findById(orgId, userId);
+    const invite = await this.prisma.invitation.findUnique({
+      where: { id: invitationId, organizationId: orgId },
+      include: { role: true, invitedBy: { select: { id: true, firstName: true, lastName: true, email: true } } }
+    });
+    if (!invite) throw new NotFoundException('Invitation not found');
+    return invite;
+  }
+
+  async resendInvitation(orgId: string, userId: string, invitationId: string) {
+    await this.findById(orgId, userId);
+    const invite = await this.prisma.invitation.findUnique({
+      where: { id: invitationId, organizationId: orgId }
+    });
+    
+    if (!invite || invite.status !== 'PENDING') {
+      throw new NotFoundException('Invitation not found or is no longer pending');
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // Reset 7 days
+
+    return this.prisma.invitation.update({
+      where: { id: invite.id },
+      data: { token, expiresAt }
     });
   }
 }

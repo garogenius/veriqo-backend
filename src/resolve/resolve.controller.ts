@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, UseInterceptors, HttpCode, HttpStatus, Request } from '@nestjs/common';
+import { Controller, Post, Get, Param, Query, Body, UseGuards, UseInterceptors, HttpCode, HttpStatus, Request, NotFoundException } from '@nestjs/common';
 import { ResolveService } from './resolve.service';
 import { ResolveAccountDto } from './dto/resolve-account.dto';
 import { ApiKeyAuthGuard } from '../auth/api-key-auth.guard';
@@ -21,5 +21,21 @@ export class ResolveController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async resolveAccount(@Request() req: any, @Body() resolveAccountDto: ResolveAccountDto) {
     return this.resolveService.resolveAccount(req.organizationId, req.apiKey.environment, resolveAccountDto);
+  }
+
+  @Get()
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'List financial accounts' })
+  async getAccounts(@Request() req: any, @Query() query: any) {
+    return this.resolveService.findAll(req.organizationId, query);
+  }
+
+  @Get(':id')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Get specific financial account' })
+  async getAccount(@Request() req: any, @Param('id') id: string) {
+    const account = await this.resolveService.findById(req.organizationId, id);
+    if (!account) throw new NotFoundException('Account not found');
+    return { data: account };
   }
 }

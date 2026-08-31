@@ -91,4 +91,42 @@ export class TransactionsService {
       throw error;
     }
   }
+
+  async findAll(organizationId: string, query: { page?: number, limit?: number, provider?: string, status?: string }) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.TransactionWhereInput = {
+      organizationId,
+      ...(query.provider && { provider: query.provider }),
+      ...(query.status && { status: query.status })
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' }
+      }),
+      this.prisma.transaction.count({ where })
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  async findById(organizationId: string, id: string) {
+    return this.prisma.transaction.findFirst({
+      where: { id, organizationId }
+    });
+  }
 }

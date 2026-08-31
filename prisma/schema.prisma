@@ -71,6 +71,7 @@ model Organization {
   businessPhone      String?
   registrationNumber String?
   status             OrgStatus @default(ACTIVE)
+  settings           Json?     @default("{}")
   ownerId            String
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -87,6 +88,8 @@ model Organization {
   invitations        Invitation[]
   notifications      Notification[]
   reconciliationJobs ReconciliationJob[]
+  invoices           Invoice[]
+  paymentMethods     PaymentMethod[]
 }
 
 enum OrgType {
@@ -286,6 +289,7 @@ model VerificationRecord {
   updatedAt      DateTime  @updatedAt
 
   transaction    Transaction @relation(fields: [transactionId], references: [id])
+  proof          Proof?
 }
 
 model WebhookEndpoint {
@@ -363,6 +367,8 @@ model Proof {
   status         String    // ACTIVE | REVOKED | EXPIRED
   token          String    @unique // Shareable token
   createdAt      DateTime  @default(now())
+
+  verification   VerificationRecord @relation(fields: [verificationId], references: [id])
 }
 
 model Alert {
@@ -445,6 +451,7 @@ model Subscription {
   organization    Organization @relation(fields: [organizationId], references: [id])
   plan            Plan         @relation(fields: [planId], references: [id])
   payments        Payment[]
+  invoices        Invoice[]
 }
 
 model Payment {
@@ -457,6 +464,38 @@ model Payment {
   createdAt       DateTime  @default(now())
 
   subscription    Subscription @relation(fields: [subscriptionId], references: [id])
+}
+
+model Invoice {
+  id              String    @id @default(uuid())
+  organizationId  String
+  subscriptionId  String?
+  amount          BigInt
+  currency        String
+  status          String    // DRAFT, OPEN, PAID, UNCOLLECTIBLE, VOID
+  dueDate         DateTime
+  paidAt          DateTime?
+  hostedUrl       String?
+  pdfUrl          String?
+  createdAt       DateTime  @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
+}
+
+model PaymentMethod {
+  id              String    @id @default(uuid())
+  organizationId  String
+  provider        String    // e.g. MOCK_PAY, PAYSTACK
+  providerToken   String
+  brand           String?   // e.g. VISA, MASTERCARD
+  last4           String?
+  expMonth        Int?
+  expYear         Int?
+  isDefault       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
 }
 
 model UsageRecord {

@@ -56,6 +56,41 @@ export class ResolveService {
       };
     } catch (error: any) {
       throw new InternalServerErrorException('Failed to resolve account');
+      throw new InternalServerErrorException('Failed to resolve account');
     }
+  }
+
+  async findAll(organizationId: string, query: { page?: number, limit?: number }) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.financialAccount.findMany({
+        where: { connection: { organizationId } },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' }
+      }),
+      this.prisma.financialAccount.count({
+        where: { connection: { organizationId } }
+      })
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  async findById(organizationId: string, id: string) {
+    return this.prisma.financialAccount.findFirst({
+      where: { id, connection: { organizationId } }
+    });
   }
 }

@@ -100,4 +100,55 @@ export class WebhooksService {
     await this.createDeliveryRecord(endpoint, 'ping', testPayload);
     return { success: true, message: 'Test event queued for delivery' };
   }
+
+  async findById(organizationId: string, endpointId: string) {
+    const endpoint = await this.prisma.webhookEndpoint.findUnique({
+      where: { id: endpointId }
+    });
+    if (!endpoint || endpoint.organizationId !== organizationId) {
+      throw new NotFoundException('Webhook endpoint not found');
+    }
+    return { data: endpoint };
+  }
+
+  async update(organizationId: string, endpointId: string, data: any) {
+    const endpoint = await this.prisma.webhookEndpoint.findUnique({
+      where: { id: endpointId }
+    });
+    if (!endpoint || endpoint.organizationId !== organizationId) {
+      throw new NotFoundException('Webhook endpoint not found');
+    }
+    return { data: await this.prisma.webhookEndpoint.update({ where: { id: endpointId }, data }) };
+  }
+
+  async remove(organizationId: string, endpointId: string) {
+    const endpoint = await this.prisma.webhookEndpoint.findUnique({
+      where: { id: endpointId }
+    });
+    if (!endpoint || endpoint.organizationId !== organizationId) {
+      throw new NotFoundException('Webhook endpoint not found');
+    }
+    await this.prisma.webhookEndpoint.delete({ where: { id: endpointId } });
+    return;
+  }
+
+  async retryDelivery(organizationId: string, endpointId: string, deliveryId: string) {
+    const endpoint = await this.prisma.webhookEndpoint.findUnique({
+      where: { id: endpointId }
+    });
+    if (!endpoint || endpoint.organizationId !== organizationId) {
+      throw new NotFoundException('Webhook endpoint not found');
+    }
+
+    const delivery = await this.prisma.webhookDelivery.findFirst({
+      where: { id: deliveryId, webhookEndpointId: endpointId }
+    });
+
+    if (!delivery) throw new NotFoundException('Delivery not found');
+
+    return { data: await this.prisma.webhookDelivery.update({
+      where: { id: deliveryId },
+      data: { status: 'PENDING', nextRetryAt: new Date(), attemptNumber: delivery.attemptNumber + 1 }
+    }) };
+  }
 }

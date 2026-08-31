@@ -127,6 +127,41 @@ export class VerifyService {
       };
     } catch (error: any) {
       throw new InternalServerErrorException('Failed to verify transaction');
+      throw new InternalServerErrorException('Failed to verify transaction');
     }
+  }
+
+  async findAll(organizationId: string, query: { page?: number, limit?: number }) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.verificationRecord.findMany({
+        where: { transaction: { organizationId } },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' }
+      }),
+      this.prisma.verificationRecord.count({
+        where: { transaction: { organizationId } }
+      })
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  async findById(organizationId: string, id: string) {
+    return this.prisma.verificationRecord.findFirst({
+      where: { id, transaction: { organizationId } }
+    });
   }
 }

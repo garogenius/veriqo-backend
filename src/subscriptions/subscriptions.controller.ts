@@ -1,20 +1,31 @@
-import { Controller, Get, Post, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiSecurity, ApiHeader } from '@nestjs/swagger';
 import { ApiKeyAuthGuard } from '../auth/api-key-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { BillingService } from './billing.service';
 
 @ApiTags('Billing & Subscriptions')
 @ApiSecurity('ApiKey')
 @Controller('v1/billing')
 export class SubscriptionsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly billingService: BillingService
+  ) {}
 
-  @Get('plan')
+  @Get('plans')
+  @ApiOperation({ summary: 'List all available billing plans' })
+  @ApiResponse({ status: 200, description: 'Returns a list of plans.' })
+  async getPlans() {
+    return { data: await this.billingService.getPlans() };
+  }
+
+  @Get('subscription')
   @UseGuards(ApiKeyAuthGuard)
-  @ApiOperation({ summary: 'Retrieve the current active subscription plan for the organization' })
-  @ApiResponse({ status: 200, description: 'Returns the active subscription plan details.' })
+  @ApiOperation({ summary: 'Retrieve the current active subscription' })
+  @ApiResponse({ status: 200, description: 'Returns the active subscription details.' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getPlan(@Request() req: any) {
+  async getSubscription(@Request() req: any) {
     const subscription = await this.prisma.subscription.findUnique({
       where: { organizationId: req.organizationId },
       include: { plan: true }
@@ -54,41 +65,62 @@ export class SubscriptionsController {
     };
   }
 
-  @Post('subscribe/mock')
+  @Post('subscribe')
   @UseGuards(ApiKeyAuthGuard)
-  @ApiOperation({ summary: 'Mock endpoint to generate a STARTER subscription for testing limits' })
-  @ApiResponse({ status: 201, description: 'Subscription created.' })
-  async mockSubscribe(@Request() req: any) {
-    // Find or create a generic STARTER plan
-    let plan = await this.prisma.plan.findFirst({ where: { name: 'STARTER' }});
-    if (!plan) {
-      plan = await this.prisma.plan.create({
-        data: {
-          name: 'STARTER',
-          monthlyPrice: BigInt(12000),
-          yearlyPrice: BigInt(120000),
-          maxApiKeys: 3,
-          maxTransactions: 100, // Strict limit for testing
-          features: { "verify": true }
-        }
-      });
-    }
+  @ApiOperation({ summary: 'Subscribe to a plan' })
+  async subscribe(@Request() req: any, @Body() body: any) {
+    return { data: await this.billingService.subscribe(req.organizationId, body.planId, body.interval) };
+  }
 
-    const sub = await this.prisma.subscription.upsert({
-      where: { organizationId: req.organizationId },
-      create: {
-        organizationId: req.organizationId,
-        planId: plan.id,
-        status: 'ACTIVE',
-        interval: 'MONTHLY',
-        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      },
-      update: {
-        planId: plan.id,
-        status: 'ACTIVE'
-      }
-    });
+  @Patch('subscription')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Update subscription details' })
+  async updateSubscription(@Request() req: any, @Body() body: any) {
+    return { data: await this.billingService.updateSubscription(req.organizationId, body) };
+  }
 
-    return { data: sub };
+  @Post('cancel')
+  @UseGuards(ApiKeyAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel active subscription' })
+  async cancelSubscription(@Request() req: any) {
+    return { data: await this.billingService.cancelSubscription(req.organizationId) };
+  }
+
+  @Get('invoices')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'List invoices' })
+  async getInvoices(@Request() req: any) {
+    return { data: await this.billingService.getInvoices(req.organizationId) };
+  }
+
+  @Get('invoices/:id')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Get specific invoice' })
+  async getInvoice(@Request() req: any, @Param('id') id: string) {
+    return { data: await this.billingService.getInvoice(req.organizationId, id) };
+  }
+
+  @Get('payment-method')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'List payment methods' })
+  async getPaymentMethods(@Request() req: any) {
+    return { data: await this.billingService.getPaymentMethods(req.organizationId) };
+  }
+
+  @Post('payment-method')
+  @UseGuards(ApiKeyAuthGuard)
+  @ApiOperation({ summary: 'Add a payment method' })
+  async addPaymentMethod(@Request() req: any, @Body() body: any) {
+    return { data: await this.billingService.addPaymentMethod(req.organizationId, body) };
+  }
+
+  @Delete('payment-method/:id')
+  @UseGuards(ApiKeyAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a payment method' })
+  async deletePaymentMethod(@Request() req: any, @Param('id') id: string) {
+    await this.billingService.deletePaymentMethod(req.organizationId, id);
+    return;
   }
 }
