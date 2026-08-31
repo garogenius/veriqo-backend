@@ -29,6 +29,8 @@ async function bootstrap() {
     .setVersion('1.0')
     .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT')
     .addApiKey({ type: 'apiKey', name: 'Authorization', in: 'header', description: 'Enter API Key as `Bearer vrq_live_...` or `Bearer vrq_test_...`' }, 'ApiKey')
+    .addServer('https://veiw-production.up.railway.app', 'Production Server')
+    .addServer('http://localhost:3000', 'Local Development Server')
     .addTag('Authentication')
     .addTag('Organizations')
     .addTag('API Keys')
