@@ -25,7 +25,7 @@ export class ApiKeyAuthGuard implements CanActivate {
 
     // Attach the api key details to the request for downstream processing
     request.apiKey = apiKey;
-    request.organizationId = apiKey.apiClient.organizationId;
+    request.organizationId = (apiKey as any).apiClient.organizationId;
 
     return true;
   }
