@@ -23,6 +23,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
     // We can also extract the organization tenant context here later
-    return user;
+    return { ...user, sessionId: payload.sessionId };
   }
 }

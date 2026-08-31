@@ -179,6 +179,198 @@ export class AuthService {
     };
   }
 
+  async refresh(refreshToken: string, ipAddress?: string, userAgent?: string) {
+    // 1. Find all active sessions
+    const sessions = await this.prisma.session.findMany({
+      where: { status: 'ACTIVE', expiresAt: { gt: new Date() } },
+      include: { user: true }
+    });
+
+    let validSession = null;
+    let user = null;
+
+    // 2. Verify hash
+    for (const session of sessions) {
+      if (await argon2.verify(session.refreshTokenHash, refreshToken)) {
+        validSession = session;
+        user = session.user;
+        break;
+      }
+    }
+
+    if (!validSession || !user) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // 3. Rotate Refresh Token
+    const rawRefreshToken = crypto.randomBytes(32).toString('hex');
+    const refreshTokenHash = await argon2.hash(rawRefreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await this.prisma.session.update({
+      where: { id: validSession.id },
+      data: {
+        refreshTokenHash,
+        expiresAt,
+        ipAddress,
+        userAgent,
+      }
+    });
+
+    const payload = { sub: user.id, email: user.email, sessionId: validSession.id };
+    
+    return {
+      access_token: await this.jwtService.signAsync(payload),
+      refresh_token: rawRefreshToken,
+    };
+  }
+
+  async logout(sessionId: string) {
+    await this.prisma.session.update({
+      where: { id: sessionId },
+      data: { status: 'REVOKED' }
+    });
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) return; // Do not reveal if user exists
+
+    const tokenRaw = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour
+
+    await this.prisma.token.create({
+      data: {
+        userId: user.id,
+        type: 'PASSWORD_RESET',
+        token: tokenRaw,
+        expiresAt
+      }
+    });
+
+    // In a real app, send email here.
+    return { message: 'If this email is registered, a password reset link has been sent.' };
+  }
+
+  async resetPassword(token: string, newPasswordRaw: string) {
+    const tokenRecord = await this.prisma.token.findUnique({ where: { token } });
+    if (!tokenRecord || tokenRecord.type !== 'PASSWORD_RESET' || tokenRecord.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    const passwordHash = await argon2.hash(newPasswordRaw);
+
+    await this.prisma.user.update({
+      where: { id: tokenRecord.userId },
+      data: { passwordHash }
+    });
+
+    // Delete token after use
+    await this.prisma.token.delete({ where: { id: tokenRecord.id } });
+    
+    // Revoke all sessions for security
+    await this.prisma.session.updateMany({
+      where: { userId: tokenRecord.userId },
+      data: { status: 'REVOKED' }
+    });
+
+    await this.logSecurityEvent(null, tokenRecord.userId, 'PASSWORD_CHANGED', 'INFO');
+
+    return { message: 'Password successfully reset' };
+  }
+
+  async verifyEmail(token: string) {
+    const tokenRecord = await this.prisma.token.findUnique({ where: { token } });
+    if (!tokenRecord || tokenRecord.type !== 'EMAIL_VERIFICATION' || tokenRecord.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    await this.prisma.user.update({
+      where: { id: tokenRecord.userId },
+      data: { 
+        emailVerifiedAt: new Date(),
+        onboardingStatus: 'EMAIL_VERIFIED' 
+      }
+    });
+
+    await this.prisma.token.delete({ where: { id: tokenRecord.id } });
+    return { message: 'Email successfully verified' };
+  }
+
+  async resendVerification(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user || user.emailVerifiedAt) return { message: 'Verification email sent' };
+
+    const tokenRaw = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await this.prisma.token.create({
+      data: {
+        userId: user.id,
+        type: 'EMAIL_VERIFICATION',
+        token: tokenRaw,
+        expiresAt
+      }
+    });
+
+    return { message: 'Verification email sent' };
+  }
+
+  async verifyPhone(token: string) {
+    const tokenRecord = await this.prisma.token.findUnique({ where: { token } });
+    if (!tokenRecord || tokenRecord.type !== 'PHONE_VERIFICATION' || tokenRecord.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    await this.prisma.user.update({
+      where: { id: tokenRecord.userId },
+      data: { phoneVerifiedAt: new Date() }
+    });
+
+    await this.prisma.token.delete({ where: { id: tokenRecord.id } });
+    return { message: 'Phone successfully verified' };
+  }
+
+  async resendPhoneVerification(userId: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user || user.phoneVerifiedAt) return { message: 'Verification SMS sent' };
+
+    const tokenRaw = crypto.randomBytes(4).toString('hex'); // shorter for SMS
+    const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000);
+
+    await this.prisma.token.create({
+      data: {
+        userId: user.id,
+        type: 'PHONE_VERIFICATION',
+        token: tokenRaw,
+        expiresAt
+      }
+    });
+
+    return { message: 'Verification SMS sent' };
+  }
+
+  async getSessions(userId: string) {
+    return this.prisma.session.findMany({
+      where: { userId, status: 'ACTIVE' },
+      select: { id: true, ipAddress: true, userAgent: true, createdAt: true, expiresAt: true }
+    });
+  }
+
+  async revokeSession(userId: string, sessionId: string) {
+    await this.prisma.session.updateMany({
+      where: { id: sessionId, userId },
+      data: { status: 'REVOKED' }
+    });
+  }
+
+  async revokeAllSessions(userId: string) {
+    await this.prisma.session.updateMany({
+      where: { userId, status: 'ACTIVE' },
+      data: { status: 'REVOKED' }
+    });
+  }
+
   private async logAttempt(email: string, success: boolean, ipAddress?: string, userAgent?: string, reason?: string) {
     try {
       await this.prisma.loginAttempt.create({

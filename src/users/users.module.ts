@@ -3,11 +3,13 @@ import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
+import { OnboardingController } from './onboarding.controller';
+import { OnboardingService } from './onboarding.service';
 
 @Module({
   imports: [PrismaModule, forwardRef(() => AuthModule)],
-  controllers: [UsersController],
-  providers: [UsersService],
+  controllers: [UsersController, OnboardingController],
+  providers: [UsersService, OnboardingService],
   exports: [UsersService],
 })
 export class UsersModule {}

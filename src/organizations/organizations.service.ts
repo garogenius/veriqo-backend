@@ -76,4 +76,125 @@ export class OrganizationsService {
 
     return org;
   }
+
+  async findAll(userId: string) {
+    return this.prisma.organization.findMany({
+      where: { memberships: { some: { userId } } }
+    });
+  }
+
+  async update(orgId: string, userId: string, data: any) {
+    // Check access first
+    await this.findById(orgId, userId);
+    return this.prisma.organization.update({
+      where: { id: orgId },
+      data,
+    });
+  }
+
+  async remove(orgId: string, userId: string) {
+    const org = await this.findById(orgId, userId);
+    // In a real app, only OWNER can delete. We will enforce via Guards later.
+    return this.prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'DELETED' }
+    });
+  }
+
+  // --- Members ---
+  async getMembers(orgId: string, userId: string) {
+    await this.findById(orgId, userId); // check access
+    return this.prisma.organizationMembership.findMany({
+      where: { organizationId: orgId },
+      include: { user: { select: { id: true, firstName: true, lastName: true, email: true } }, role: true }
+    });
+  }
+
+  async addMember(orgId: string, userId: string, data: any) {
+    await this.findById(orgId, userId);
+    return this.prisma.organizationMembership.create({
+      data: {
+        organizationId: orgId,
+        userId: data.userId,
+        roleId: data.roleId,
+      }
+    });
+  }
+
+  async updateMember(orgId: string, userId: string, memberId: string, data: any) {
+    await this.findById(orgId, userId);
+    return this.prisma.organizationMembership.update({
+      where: { id: memberId, organizationId: orgId },
+      data: { roleId: data.roleId, status: data.status }
+    });
+  }
+
+  async removeMember(orgId: string, userId: string, memberId: string) {
+    await this.findById(orgId, userId);
+    return this.prisma.organizationMembership.update({
+      where: { id: memberId, organizationId: orgId },
+      data: { status: 'REMOVED' }
+    });
+  }
+
+  // --- Invitations ---
+  async inviteMember(orgId: string, userId: string, data: any) {
+    await this.findById(orgId, userId);
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    
+    return this.prisma.invitation.create({
+      data: {
+        organizationId: orgId,
+        email: data.email,
+        roleId: data.roleId,
+        token,
+        expiresAt,
+        invitedById: userId,
+      }
+    });
+  }
+
+  async getInvitations(orgId: string, userId: string) {
+    await this.findById(orgId, userId);
+    return this.prisma.invitation.findMany({
+      where: { organizationId: orgId, status: 'PENDING' },
+      include: { role: true, invitedBy: { select: { id: true, firstName: true, lastName: true, email: true } } }
+    });
+  }
+
+  async acceptInvitation(token: string, userId: string) {
+    const invite = await this.prisma.invitation.findUnique({ where: { token } });
+    if (!invite || invite.status !== 'PENDING' || invite.expiresAt < new Date()) {
+      throw new NotFoundException('Invalid or expired invitation');
+    }
+
+    const membership = await this.prisma.organizationMembership.create({
+      data: {
+        userId,
+        organizationId: invite.organizationId,
+        roleId: invite.roleId,
+        invitedById: invite.invitedById,
+        joinedAt: new Date()
+      }
+    });
+
+    await this.prisma.invitation.update({
+      where: { id: invite.id },
+      data: { status: 'ACCEPTED' }
+    });
+
+    return membership;
+  }
+
+  async deleteInvitation(id: string, userId: string) {
+    const invite = await this.prisma.invitation.findUnique({ where: { id } });
+    if (!invite) throw new NotFoundException('Invitation not found');
+    await this.findById(invite.organizationId, userId); // verify admin rights
+    
+    return this.prisma.invitation.update({
+      where: { id },
+      data: { status: 'REVOKED' }
+    });
+  }
 }
