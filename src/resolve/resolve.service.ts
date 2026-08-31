@@ -1,0 +1,60 @@
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { ResolveAccountDto } from './dto/resolve-account.dto';
+import { ProviderRouter } from '../providers/provider.router';
+import { PrismaService } from '../prisma/prisma.service';
+
+@Injectable()
+export class ResolveService {
+  constructor(
+    private providerRouter: ProviderRouter,
+    private prisma: PrismaService
+  ) {}
+
+  async resolveAccount(organizationId: string, environment: 'SANDBOX' | 'PRODUCTION', dto: ResolveAccountDto) {
+    try {
+      const response = await this.providerRouter.resolveAccount(environment, {
+        country: dto.country,
+        institution: dto.institution,
+        account: dto.account
+      });
+
+      // We use a dummy transaction ID for Resolve since it's an account check, not a payment.
+      // In a real implementation, you might have a distinct model for AccountResolution.
+      // For this spec, we will store it in VerificationRecord linked to a dummy Transaction or create an AccountResolution model.
+      // Let's create a dummy transaction to satisfy the foreign key constraint for VerificationRecord.
+      
+      const transaction = await this.prisma.transaction.create({
+        data: {
+          organizationId,
+          amount: 0,
+          currency: 'NGN',
+          direction: 'N/A',
+          status: 'N/A',
+          transactionType: 'ACCOUNT_RESOLUTION',
+        }
+      });
+
+      const record = await this.prisma.verificationRecord.create({
+        data: {
+          transactionId: transaction.id,
+          method: 'ACCOUNT_RESOLVE',
+          provider: response.institution?.name || 'Unknown',
+          status: response.status,
+          result: JSON.parse(JSON.stringify(response)),
+        }
+      });
+
+      return {
+        data: {
+          resolution_id: record.id,
+          status: response.status,
+          account: response.account,
+          institution: response.institution,
+          resolved_at: record.createdAt
+        }
+      };
+    } catch (error: any) {
+      throw new InternalServerErrorException('Failed to resolve account');
+    }
+  }
+}

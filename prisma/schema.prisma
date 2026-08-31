@@ -1,0 +1,217 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                String    @id @default(uuid())
+  firstName         String
+  lastName          String
+  email             String    @unique
+  normalizedEmail   String    @unique
+  phoneNumber       String?
+  passwordHash      String
+  emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
+  avatarUrl         String?
+  status            UserStatus @default(ACTIVE)
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  memberships       OrganizationMembership[]
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  DEACTIVATED
+  DELETED
+}
+
+model Organization {
+  id                 String    @id @default(uuid())
+  name               String
+  legalName          String?
+  organizationType   OrgType
+  country            String
+  industry           String?
+  website            String?
+  registrationNumber String?
+  status             OrgStatus @default(ACTIVE)
+  ownerId            String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  memberships        OrganizationMembership[]
+  apiClients         ApiClient[]
+  transactions       Transaction[]
+  webhookEndpoints   WebhookEndpoint[]
+}
+
+enum OrgType {
+  INDIVIDUAL
+  BUSINESS
+  FINTECH
+  BANK
+  HOSPITAL
+  UNIVERSITY
+  ENTERPRISE
+  OTHER
+}
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+model OrganizationMembership {
+  id             String    @id @default(uuid())
+  userId         String
+  organizationId String
+  roleId         String
+  status         MembershipStatus @default(ACTIVE)
+  invitedById    String?
+  joinedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user           User         @relation(fields: [userId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  role           Role         @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, organizationId])
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions Permission[] @relation("RolePermissions")
+  memberships OrganizationMembership[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g., "organization.read"
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles       Role[]   @relation("RolePermissions")
+}
+
+model ApiClient {
+  id             String    @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  environment    ApiEnvironment @default(SANDBOX)
+  status         ClientStatus   @default(ACTIVE)
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  keys           ApiKey[]
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+enum ApiEnvironment {
+  SANDBOX
+  PRODUCTION
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+model ApiKey {
+  id               String    @id @default(uuid())
+  apiClientId      String
+  publicIdentifier String    @unique // e.g. vrq_live_8f3d...
+  secretHash       String
+  environment      ApiEnvironment
+  scopes           String[]  // Array of scopes e.g. ["resolve:read", "transactions:verify"]
+  status           KeyStatus @default(ACTIVE)
+  lastUsedAt       DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  apiClient        ApiClient @relation(fields: [apiClientId], references: [id])
+}
+
+enum KeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+model Transaction {
+  id                  String    @id @default(uuid())
+  organizationId      String
+  connectionId        String?
+  provider            String?
+  externalTransactionId String?
+  amount              Decimal
+  currency            String
+  direction           String    // e.g. DEBIT, CREDIT
+  status              String
+  reference           String?
+  transactionType     String?
+  metadata            Json?
+  occurredAt          DateTime?
+  verifiedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  verifications       VerificationRecord[]
+}
+
+model VerificationRecord {
+  id             String    @id @default(uuid())
+  transactionId  String
+  method         String
+  provider       String
+  status         String    // e.g. PENDING, VERIFIED, FAILED
+  result         Json?
+  reasonCategory String?
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  transaction    Transaction @relation(fields: [transactionId], references: [id])
+}
+
+model WebhookEndpoint {
+  id             String    @id @default(uuid())
+  organizationId String
+  url            String
+  secret         String
+  environment    ApiEnvironment
+  status         String    @default("ACTIVE")
+  events         String[]  // Subscribed events
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
