@@ -20,10 +20,12 @@ model User {
   avatarUrl         String?
   status            UserStatus @default(ACTIVE)
   lastLoginAt       DateTime?
+  isSuperAdmin      Boolean   @default(false)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   memberships       OrganizationMembership[]
+  adminActionLogs   AdminActionLog[]
 }
 
 enum UserStatus {
@@ -214,4 +216,17 @@ model WebhookEndpoint {
   updatedAt      DateTime  @updatedAt
 
   organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model AdminActionLog {
+  id             String    @id @default(uuid())
+  adminId        String
+  action         String
+  targetType     String    // e.g. "ORGANIZATION", "USER", "API_KEY"
+  targetId       String?
+  metadata       Json?
+  ipAddress      String?
+  createdAt      DateTime  @default(now())
+
+  admin          User      @relation(fields: [adminId], references: [id])
 }
